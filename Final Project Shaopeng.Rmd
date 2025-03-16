@@ -1,0 +1,680 @@
+---
+title: "STAT 365 Final Project"
+author: "Shaopeng Gu"
+date: "2025-03-11"
+output: 
+  bookdown::pdf_document2:
+    toc: false
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+setwd("/Users/frank/Documents/portfolio-analysis")
+```
+
+```{r echo=FALSE, message=FALSE}
+options(digits=4)
+# Load libraries
+library(tseries)
+library(tidyverse)
+library(ShrinkCovMat)
+library(quadprog)
+```
+
+# Notes
+
+All necessary R code that contains all the calculations, steps, and results can be downloaded here:
+[Download R Code](https://github.com/Frank-Gu-81/portfolio-analysis).
+
+# Question 1
+
+## Fund 1 -- PRRAX
+
+This fund is Principal Real Estate Securities Fund Class A. The fund invests more than 25% of its net assets in securities in the real industry and it is non-diversified^[https://www.principalam.com/us/fund/prrax]. 
+
+## Fund 2 -- FSPHX
+
+This fund is Fidelity Select Health Care Portfolio. The fund primarily invest in companies that are engaged in the manufacture, design, or sale of products that are related to the health care industry^[https://fundresearch.fidelity.com/mutual-funds/summary/316390301].
+
+## Fund 3 -- VUIAX
+
+The fund is Vanguard Utilities Index Fund Admiral Shares. The fund seeks to track the performance of a benchmark index that measures the investment return of stocks in the utilities sector of the U.S. equity market^[https://investor.vanguard.com/investment-products/mutual-funds/profile/vuiax].
+
+## Fund 4 -- FSRBX
+
+This fund is Fidelity Select Banking Portfolio. The fund primarily invests at least 80% of the assets in securities of companies principally engaged in banking, including savings and loans, and other financial institutions^[https://fundresearch.fidelity.com/mutual-funds/summary/316390640].
+
+# Question 2 -- Completed
+
+```{r}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+#| results: "hide"
+
+# Question 2 ----
+
+# excess returns of the 4 mutual funds is stored in `excess_returns`
+
+# get risk free results from the tresury bill data
+RF_Data <- read.csv("data/TB3MS.csv")
+rff <- RF_Data$TB3MS
+rfree <- (1 + rff/100)^(1/12)-1
+
+# calculate the excess returns of the 4 mutual funds
+excess_returns <- list()
+get_excess_returns <- function(companyList) {
+  for (ticker in companyList) {
+    companyData <- get.hist.quote(
+      instrument = ticker,
+      start = "2019-12-01",
+      end = "2024-12-31",
+      quote = "AdjClose",
+      compression = "m"
+    )
+    adjPrices <- as.vector(companyData)
+    returns <- (adjPrices[-1] - adjPrices[-length(adjPrices)]) / adjPrices[-length(adjPrices)]
+    excess_returns[[ticker]] <- returns - rfree
+  }
+  return(as.data.frame(excess_returns))
+}
+
+companyList <- c("PRRAX", "FSPHX", "VUIAX", "FSRBX")
+
+excess_returns <- get_excess_returns(companyList)
+```
+
+
+# Question 3 -- Completed
+
+```{r}
+#| echo: FALSE
+#| message: FALSE
+#| warning: FALSE
+#| results: "hide"
+
+# Question 3 ----
+
+# excess returns of SP500 is stored in `sp500`
+
+sp500_temp <- get.hist.quote(
+  instrument = "^GSPC",
+  start = "2019-12-01",
+  end = "2024-12-31",
+  quote = "AdjClose",
+  compression = "m"
+)
+sp500_adj <- as.vector(sp500_temp)
+sp500_returns <- (sp500_adj[-1] - sp500_adj[-length(sp500_adj)]) / sp500_adj[-length(sp500_adj)]
+sp500 <- sp500_returns - rfree
+sp500
+```
+
+# Question 4
+
+The return sample mean for each of the four mutual funds is shown in Table \@ref(tab:return-sample-mu).
+
+```{r return-sample-mu, echo=FALSE}
+
+# Question 4 ----
+sample_mu <- apply(excess_returns, 2, mean)
+
+sample_mu_df <- as.data.frame(sample_mu)
+sample_mu_df <- sample_mu_df |> 
+  rownames_to_column(var = "Fund")  |> 
+  rename("Return Sample Mean" = "sample_mu")
+knitr::kable(sample_mu_df, caption = "Return Sample Mean for Mutual Funds") |> kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+The return sample standard deviation for each of the four mutual funds is shown in Table \@ref(tab:return-sample-sd).
+
+```{r return-sample-sd, echo=FALSE}
+
+sample_sd <- apply(excess_returns, 2, sd)
+sample_sd_df <- as.data.frame(sample_sd)
+sample_sd_df <- sample_sd_df |> 
+  rownames_to_column(var = "Fund")  |> 
+  rename("Return Sample Standard Deviation" = "sample_sd")
+knitr::kable(sample_sd_df, caption = "Return Sample Standard Deviation for Mutual Funds") |> kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+Based on the return sample mean and standard deviation, `FSRBX` appears to be the most superior fund because it has the highest return sample mean (0.0090) but also the highest risk (0.0904 standard deviation). This suggests that while FSRBX offers the best average return, it is also the most volatile.
+
+Conversely, `PRRAX` appears to be the most inferior because it has the lowest return sample mean (0.0025) and a relatively high standard deviation (0.0604), meaning it provides the worst risk-return tradeoff.
+
+Overall, there is no fund that is clearly superior or inferior to all others in both return and risk. Some investors might prefer a fund with lower returns but also lower volatility (e.g., `FSPHX` with 0.0030 mean return and 0.0503 standard deviation). The best choice depends on the investor’s risk tolerance and return expectations.
+
+# Question 5
+
+The covariance matrix of the excess returns for the four mutual funds is shown in Table \@ref(tab:return-sample-cov).
+
+```{r return-sample-cov, echo=FALSE}
+# Question 5 ----
+sample_cov <- cov(excess_returns)
+sample_cov_df <- as.data.frame(sample_cov)
+sample_cov_df |> 
+  knitr::kable(
+    caption = "Covariance Matrix of Excess Returns for Mutual Funds"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 6
+
+The shrinkage estimates of the covariance matrix of the excess returns for the four mutual funds is shown in Table \@ref(tab:cov-shrink).
+
+```{r cov-shrink, echo=FALSE}
+# Question 6 ----
+cov_shrink <- shrinkcovmat.equal(t(excess_returns))$Sigmahat
+
+cov_shrink_df <- as.data.frame(cov_shrink)
+cov_shrink_df |> 
+  knitr::kable(
+    caption = "Shrinkage Covariance Matrix of Excess Returns for Mutual Funds"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+# Question 7
+
+**Yes, the single-index model appear to be appropriate for these data**. 
+
+Table \@ref(tab:sim-cov) shows the estimated covariance matrix of excess returns for mutual funds under the single-index model (SIM), which assumes that the covariance between asset returns is entirely attributable to the market index. Comparing between Table \@ref(tab:return-sample-cov) and Table \@ref(tab:sim-cov), we can see that the estimated covariance matrix under SIM is generally similar to the sample covariance matrix. This suggests that the single-index model is a reasonable approximation for the covariance structure of the mutual funds. 
+
+The comparison between the standard deviations under SIM and the sample covariance is shown in Table \@ref(tab:sd-comp) demonstrates that they are essentially the same. This further supports the conclusion that the single-index model is appropriate for these data.
+
+```{r sim-cov, echo=FALSE}
+# Question 7 ----
+get_alphas <- function(y) {
+  summary(lm(y ~ sp500))$coefficients[1, 1]
+}
+get_betas <- function(y) {
+  summary(lm(y ~ sp500))$coefficients[2, 1]
+}
+get_sd <- function(y) {
+  summary(lm(y ~ sp500))$sigma
+}
+stks.alpha <- apply(excess_returns, 2, get_alphas)
+stks.beta <- apply(excess_returns, 2, get_betas)
+stks.s <- apply(excess_returns, 2, get_sd)
+stks.Sig <- var(c(sp500)) * (stks.beta%*%t(stks.beta)) + diag(stks.s^2)
+stks.Sig.df <- as.data.frame(stks.Sig)
+stks.Sig.df |> 
+  knitr::kable(
+    caption = "Estimated Covariance Matrix of Excess Returns for Mutual Funds Under SIM"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+```{r sd-comp, echo=FALSE}
+sd_comp <- data.frame(diag(stks.Sig)^0.5, diag(sample_cov)^0.5) |> 
+  rename("Sig Under SIM" = "diag.stks.Sig..0.5", "Sample Sig" = "diag.sample_cov..0.5")
+sd_comp |> 
+  knitr::kable(
+    caption = "Comparison of Standard Deviations Under SIM and Sample Covariance"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+# Question 8
+
+```{r echo=FALSE}
+# Question 8 ----
+lambda.1 <- 5
+ra.1 <- solve.QP(
+  Dmat = lambda.1 * sample_cov,
+  dvec = sample_mu,
+  Amat = matrix(rep(1,4), 4, 1),
+  bvec = 1,
+  meq = 1
+)
+w_opt_ra.1 <- ra.1$solution
+w_opt_ra_mean.1 <- sum(w_opt_ra.1 * sample_mu)
+w_opt_ra_sd.1 <- (w_opt_ra.1 %*% sample_cov %*% w_opt_ra.1)^0.5
+```
+
+
+The estimated weight vectors of the risk-averse portfolio with $\lambda = 5$ is $[-0.5436, 0.5833, 0.6542, 0.3061]$. The estimated sample mean return is $0.0059$ and the estimated standard deviation is $0.0499$.
+
+
+# Question 9
+
+```{r echo=FALSE}
+# Question 9 ----
+lambda.2 <- 10
+ra.2 <- solve.QP(
+  Dmat = lambda.2 * sample_cov,
+  dvec = sample_mu,
+  Amat = matrix(rep(1,4), 4, 1),
+  bvec = 1,
+  meq = 1
+)
+w_opt_ra.2 <- ra.2$solution
+w_opt_ra_mean.2 <- sum(w_opt_ra.2 * sample_mu)
+w_opt_ra_sd.2 <- (w_opt_ra.2 %*% sample_cov %*% w_opt_ra.2)^0.5
+```
+
+
+The estimated weight vectors of the risk-averse portfolio with $\lambda = 10$ is $[-0.3153, 0.5993, 0.5556, 0.1605]$. The estimated sample mean return is $0.0048$ and the estimated standard deviation is $0.0464$.
+
+
+# Question 10
+
+```{r echo=FALSE}
+# Question 10 ----
+lambda.3 <- 20
+ra.3 <- solve.QP(
+  Dmat = lambda.3 * sample_cov,
+  dvec = sample_mu,
+  Amat = matrix(rep(1,4), 4, 1),
+  bvec = 1,
+  meq = 1
+)
+w_opt_ra.3 <- ra.3$solution
+w_opt_ra_mean.3 <- sum(w_opt_ra.3 * sample_mu)
+w_opt_ra_sd.3 <- (w_opt_ra.3 %*% sample_cov %*% w_opt_ra.3)^0.5
+```
+
+
+The estimated weight vectors of the risk-averse portfolio with $\lambda = 20$ is $[-0.2012, 0.6073, 0.5062, 0.0877]$. The estimated sample mean return is $0.0043$ and the estimated standard deviation is $0.0455$.
+
+# Question 11
+
+The portfolio with $\lambda = 20$ has the smallest risk, while the portfolio with $\lambda = 5$ has the largest estimated return mean. **This aligns with portfolio theory**, which states that as risk aversion increases, the portfolio becomes more conservative, leading to lower return and lower standard deviation.
+
+The results also show that as $\lambda$ increases, the portfolio reduces exposure to riskier assets and increases allocation to lower-risk assets. This confirms the expected trade-off between risk and return in mean-variance optimization.
+
+# Question 12
+
+```{r echo=FALSE}
+# Question 12 ----
+w_tangency <- solve(sample_cov, sample_mu) / sum(solve(sample_cov, sample_mu))
+
+w_tangency_mean <- sum(w_tangency * sample_mu)
+w_tangency_sd <- (w_tangency %*% sample_cov %*% w_tangency)^0.5
+```
+
+
+The estimated weights of the tangency portfolio is $[-1.350, 0.527, 1.003, 0.820]$. The estimated mean return is $0.0099$ and the estimated standard deviation is $0.0739$.
+
+# Question 13
+
+```{r echo=FALSE}
+# Question 13 Example 5.11 ----
+wT_nn <- solve.QP(
+  Dmat = 2 * sample_cov,
+  dvec = rep(0, 4),
+  Amat = cbind(sample_mu, diag(4)),
+  bvec = c(1, 0, 0, 0, 0),
+  meq = 1
+)$solution
+
+wT_nn <- wT_nn / sum(wT_nn)
+
+wT_nn_mean <- sum(wT_nn * sample_mu)
+wT_nn_sd <- (wT_nn %*% sample_cov %*% wT_nn)^0.5
+```
+
+
+The estimated weights of the tangency portfolio with non-negative weight constraints is $[0.0000,0.0000,0.4786,0.5214]$. The estimated mean return is $0.0068$ and the estimated standard deviation is $0.0627$.
+
+# Question 14
+
+```{r echo=FALSE}
+# Question 14 ----
+wT_shrink <- solve(cov_shrink, sample_mu) / sum(solve(cov_shrink, sample_mu))
+
+wT_shrink_mean <- sum(wT_shrink * sample_mu)
+wT_shrink_sd <- (wT_shrink %*% cov_shrink %*% wT_shrink)^0.5
+```
+
+The estimated weights of the tangency portfolio using the shrinkage estimated of the covaraince matrix is $[-0.9014, 0.3539, 0.7797, 0.7679]$. The estimated mean return is $0.0091$ and the estimated standard deviation is $0.0721$.
+
+
+# Question 15
+
+The sharpe ratios for each of the portfolios considered in parts (8) - (10) and (12) - (14) are shown in Table \@ref(tab:sharpe-ratios).
+
+```{r sharpe-ratios, echo=FALSE}
+# Question 15 ----
+# Compute Sharpe Ratios
+sharpe_ra_5 <- (w_opt_ra_mean.1) / w_opt_ra_sd.1  # From (8)
+sharpe_ra_10 <- (w_opt_ra_mean.2) / w_opt_ra_sd.2  # From (9)
+sharpe_ra_20 <- (w_opt_ra_mean.3) / w_opt_ra_sd.3  # From (10)
+sharpe_tangency <- (w_tangency_mean) / w_tangency_sd  # From (12)
+sharpe_tangency_nn <- (wT_nn_mean) / wT_nn_sd  # From (13)
+sharpe_tangency_shrink <- (wT_shrink_mean) / wT_shrink_sd  # From (14)
+
+# Store results in a data frame
+sharpe_ratios <- data.frame(
+  Portfolio = c("Risk-Averse (lambda=5)", "Risk-Averse (lambda=10)", "Risk-Averse (lambda=20)", 
+                "Tangency Portfolio", "Non-Negative Tangency", "Shrinkage Tangency"),
+  Sharpe_Ratio = c(sharpe_ra_5, sharpe_ra_10, sharpe_ra_20, 
+                   sharpe_tangency, sharpe_tangency_nn, sharpe_tangency_shrink)
+) |> 
+  rename(
+    "Sharpe Ratio" = Sharpe_Ratio
+  )
+sharpe_ratios |> 
+  knitr::kable(
+    caption = "Sharpe Ratios for Different Portfolios"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+**Yes, the Sharpe ratios follow the expected pattern from portfolio theory**. The tangency portfolio (0.1337) has the highest Sharpe ratio, as it is constructed to maximize return per unit of risk. The risk-averse portfolios ($\lambda = 5, 10, 20$) show decreasing Sharpe ratios as $\lambda$ increases, which aligns with theory since higher risk aversion leads to more conservative allocations with lower returns.
+
+The non-negative tangency portfolio (0.1079) has a lower Sharpe ratio than the unconstrained tangency portfolio, which is expected because restricting short-selling removes some optimization flexibility. The shrinkage tangency portfolio (0.1257) has a slightly lower Sharpe ratio than the standard tangency portfolio, which is reasonable since shrinkage reduces estimation noise but can also lead to a slight loss in efficiency. Overall, these results are consistent with what we expect from mean-variance optimization.
+
+
+# Question 16
+
+The weight allocation of the tangency portfolio with 4 funds and S&P 500 is shown in Table \@ref(tab:w-tangency-funds).
+
+```{r w-tangency-funds, echo=FALSE}
+# Question 16 ----
+p_mu <- cbind(excess_returns, sp500) |> 
+  apply(2, mean)
+p_sd <- cbind(excess_returns, sp500) |> 
+  apply(2, sd)
+p_cov <- cov(cbind(excess_returns, sp500))
+
+wT_p <- solve(p_cov, p_mu) / sum(solve(p_cov, p_mu))
+wT_p_df <- as.data.frame(wT_p) |> 
+  rownames_to_column(var = "Asset") |> 
+  rename("Weight" = "wT_p")
+
+wT_p_df |> 
+  knitr::kable(
+    caption = "Weight Allocation of Tangency Portfolio with 4 Funds and SP 500"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+According to portfolio theory, all investors should hold the market portfolio, which is the tangency portfolio when risk-free borrowing and lending are allowed. Since the S&P 500 is defined as the market portfolio in this case, we would expect the tangency portfolio, formed from the 4 funds and the S&P 500, to allocate significant weight to the S&P 500, but not necessarily be identical to it, as the additional funds may provide diversification benefits.
+
+**Our results, shown in Table @ref(tab:w-tangency-funds), align with this expectation based on portfolio theory and the CAPM**. As shown in Table @ref(tab:sharpe-p), The S&P 500 has the highest Sharpe ratio (0.17846), and the tangency portfolio assigns it the largest weight (3.3880), which is **consistent with CAPM predictions**. However, PRRAX and FSPHX receive negative weights (-2.5360 and -0.4656, respectively), indicating short positions. This suggests that these funds contribute negatively to risk-adjusted returns, which is supported by their low Sharpe ratios (0.04155 and 0.05876, the lowest among the five assets).
+
+The large negative weight for PRRAX is expected, as Question 4 identified PRRAX as the most inferior fund, meaning it provides poor risk-return tradeoffs. However, in practical investing, short-selling may be restricted. In fact, if we recalculate the tangency portfolio with non-negative weight constraints as shown in Table @ref(tab:16-nn), all funds receives 0 weight and the S&P 500 receives the entire weight of 1, which further **supports the CAPM prediction that all investors should hold the market portfolio**.
+
+```{r sharpe-p, echo=FALSE}
+sharpe_p <- (p_mu) / (p_sd) 
+sharpe_p_df <- as.data.frame(sharpe_p) |> 
+  rownames_to_column(var = "Asset") |> 
+  rename("Sharpe Ratio" = "sharpe_p")
+sharpe_p_df |> 
+  knitr::kable(
+    caption = "Sharpe Ratios for 4 Funds and SP 500"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+```{r 16-nn, echo=FALSE}
+ra_16 <- solve.QP(
+  Dmat=2*p_cov, 
+  dvec=rep(0,5), 
+  Amat=cbind(p_mu, diag(5)), 
+  bvec=c(1,rep(0,5)), 
+  meq=1
+)
+w_16 <- ra_16$solution/sum(ra_16$solution)
+weight_16 <- formatC(w_16, format="g", digits=4)
+weight_16_df <- as.data.frame(weight_16) |> 
+  rownames_to_column(var = "Asset") |> 
+  rename("Weight" = "weight_16")
+weight_16_df$Asset <- c(colnames(excess_returns), "sp500")
+weight_16_df |> 
+  knitr::kable(
+    caption = "Weight Allocation of Risk-Averse Portfolio with Non-Negative Weight Constraint"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+# Question 17
+
+As shown in Table \@ref(tab:param-estimates), the estimated betas and alphas for the 4 funds are shown. `FSRBX` appears to be the most sensitive to the market, with the highest beta (1.1009), meaning it moves more than the market—a 1% market increase leads to a 1.1009% rise in `FSRBX`. `VUIAX` is the least sensitive, with the lowest beta (0.6466), meaning it fluctuates less than the market. `PRRAX` (0.9981) and `FSPHX` (0.6817) have moderate sensitivity. These results align with portfolio theory, where higher beta implies greater market risk exposure.
+
+```{r param-estimates, echo=FALSE}
+# Question 17 ----
+p_betas <- apply(excess_returns, 2, get_betas)
+p_betas_df <- as.data.frame(p_betas)
+p_alphas <- apply(excess_returns, 2, get_alphas)
+p_alphas_df <- as.data.frame(p_alphas)
+p_params <- cbind(p_betas, p_alphas) |> 
+  as.data.frame() |> 
+  rename("Beta" = "p_betas", "Alpha" = "p_alphas")
+
+p_params |> 
+  knitr::kable(
+    caption = "Parameter Estimates for 4 Funds"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 18
+
+We calculated the adjusted p-values to be $[0.3667, 0.8908, 0.8908, 0.8908]$. Since the minimum adjusted p-value is 0.3667, which is larger than the FDR level of 0.20, we fail to reject the null hypothesis that the beta is equal to zero for all stocks. This means that there is not enough evidence to conclude that any of the funds are mispriced.
+
+
+# Question 19
+
+The estimates of the market and non-market risk components for the 4 funds are shown in Table \@ref(tab:risk-components).
+
+```{r risk-components, echo=FALSE}
+# Question 19 ----
+f_get_residual_se <- function(y) {
+  summary(lm(y ~ sp500))$sigma
+}
+p_non_market_se <- apply(excess_returns, 2, f_get_residual_se)
+
+p_market_se <- p_betas * sd(sp500)
+
+p_risk_components <- cbind(p_market_se, p_non_market_se) |> 
+  as.data.frame() |> 
+  rename("Market Risk" = "p_market_se", "Non-Market Risk" = "p_non_market_se")
+
+p_risk_components |> 
+  knitr::kable(
+    caption = "Market and Non-Market Risk Components for 4 Funds"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 20
+
+The R-squared values for the 4 funds are shown in Table \@ref(tab:p-rsq). Specifically, about 75.14% of the variance in `PRRAX` is explained by the market, about 50.58% of the variance in `FSPHX` is explained by the market, about 39.01% of the variance in `VUIAX` is explained by the market, and about 40.82% of the variance is explained by the market.
+
+
+```{r p-rsq, echo=FALSE}
+# Question 20 ----
+f_get_rsq <- function(y) {
+  summary(lm(y ~ sp500))$r.squared
+}
+p_rsq <- apply(excess_returns, 2, f_get_rsq)
+p_rsq_df <- as.data.frame(p_rsq) |> 
+  rename("R-Squared" = "p_rsq")
+p_rsq_df |>
+  knitr::kable(
+    caption = "R-Squared Values for 4 Funds"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 21
+
+As shown in Table @ref(tab:param-estimates-eqw), the estimated beta of the equally weighted portfolio is 0.8568, and its alpha is -0.0033. The market risk component is 0.0449, and the non-market risk is 0.0276. 
+
+The average return standard deviation of the portfolio is 0.0526, which is lower than that of all individual funds (0.0638). Compared to the individual funds shown in Table @ref(tab:risk-components), the portfolio's market risk is lower than `PRRAX` (0.0524) and `FSRBX` (0.0577) but slightly higher than `FSPHX` (0.0358) and `VUIAX` (0.0339). Meanwhile, the portfolio’s non-market risk (0.0276) is lower than all individual funds, consistent with diversification reducing idiosyncratic risk. 
+
+**These results are consistent with the market model prediction** that a portfolio's beta should be close to the weighted average of its components' betas and that diversification should reduce non-market risk. The small negative alpha (-0.0033) suggests a slight underperformance relative to the market. The results generally match expectations, though slight discrepancies may arise due to estimation error or correlations among the funds affecting the overall risk distribution.
+
+```{r param-estimates-eqw, echo=FALSE}
+# Question 21 ----
+p_eqw <- rowMeans(excess_returns)
+alpha_p_eqw <- get_alphas(p_eqw)
+beta_p_eqw <- get_betas(p_eqw)
+
+mr_p_eqw <- beta_p_eqw * sd(sp500)
+nmr_p_eqw <- f_get_residual_se(p_eqw)
+
+ret_sd_p_eqw <- sd(p_eqw)
+
+p_eqw_params <- cbind(beta_p_eqw, alpha_p_eqw, mr_p_eqw, nmr_p_eqw, ret_sd_p_eqw) |> 
+  as.data.frame() |> 
+  rename("Beta" = "beta_p_eqw", "Alpha" = "alpha_p_eqw", "Market Risk" = "mr_p_eqw", "Non-Market Risk" = "nmr_p_eqw", "Return SD" = "ret_sd_p_eqw")
+
+p_eqw_params |>
+  knitr::kable(
+    caption = "Parameter Estimates for Equal-Weighted Portfolio"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 22
+
+```{r echo=FALSE}
+# Question 22 ----
+# Add constraint that the portfolio is uncorrelated with S&P 500
+w_mv_uncorrelated <- solve.QP(
+  Dmat = 2 * sample_cov, 
+  dvec = rep(0, 4), 
+  Amat = cbind(p_betas, rep(1, 4)),  # Constraint matrix 
+  bvec = c(0, 1),  # Enforce beta = 0 and sum(weights) = 1
+  meq = 2
+)$solution
+
+# Compute expected return and standard deviation of the portfolio
+uncorrelated_mean <- sum(w_mv_uncorrelated * sample_mu)
+uncorrelated_sd <- (w_mv_uncorrelated %*% sample_cov %*% w_mv_uncorrelated)^0.5
+```
+
+
+The minimum variance portfolio, subject to the restriction that it is uncorrelated with the S&P 500 index, has the following estimated weights (in order: `PRRAX`, `FSPHX`, `VUIAX`, `FSRBX`): 
+
+\[w=[-1.8091,1.5004,1.4476,-0.1389]\]
+
+The expected return of this portfolio is 0.0048, and its standard deviation (total risk) is 0.0842.
+
+This portfolio contains large positive weights on `FSPHX` and `VUIAX` while shorting `PRRAX`, which helps neutralize the portfolio’s market exposure ($\beta = 0$) while still minimizing risk. The presence of negative weights (short-selling) is expected because achieving zero correlation with the market often requires balancing assets with opposing beta exposures.
+
+
+# Question 23 
+
+As shown in Table @ref(tab:sharp-uncor-sp), the Sharpe ratio for the portfolio uncorrelated with the S&P 500 is 0.0575, whereas the Sharpe ratio for the S&P 500 is 0.1785.
+
+According to CAPM and portfolio theory, the market portfolio (S&P 500) should have the highest Sharpe ratio, as it represents the optimal risk-return tradeoff in an efficient market. The minimum variance portfolio with zero correlation to the market is expected to have a lower Sharpe ratio, since it is constructed to minimize risk rather than maximize risk-adjusted returns.
+
+**The results align with theoretical expectations**, as the market portfolio outperforms the uncorrelated portfolio in terms of risk-adjusted returns. The lower Sharpe ratio of the minimum variance portfolio suggests that, despite having reduced total risk, it does not offer the same level of excess return per unit of risk as the market portfolio. This is expected because market-neutral portfolios often sacrifice returns to achieve low correlation with the broader market.
+
+```{r sharp-uncor-sp, echo=FALSE}
+# Question 23 ----
+sharpe_uncorrelated <- (uncorrelated_mean) / (uncorrelated_sd)
+sharpe_sp500 <- mean(sp500) / sd(sp500)
+sharpe_23 <- cbind(sharpe_uncorrelated, sharpe_sp500) |> 
+  as.data.frame() |> 
+  rename(
+    "Sharpe Ratio for SP500" = "sharpe_sp500",
+    "Sharpe Ratio for Portfolio Uncorrelated with SP500" = "V1"
+  )
+sharpe_23 |>
+  knitr::kable(
+    caption = "Sharpe Ratios for SP500 and Portfolio Uncorrelated with SP500"
+  ) |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 24
+
+The estimated parameters confirm that the minimum variance portfolio (uncorrelated with S&P 500) has zero market exposure ($\beta = 0$) and zero market risk, meaning it does not move with the market. All of its risk comes from non-market sources, with a non-market risk of 0.085. The $R^2 = 0$ indicates that the market explains none of the portfolio’s variance, which **aligns with expectations for a market-neutral portfolio**. These results confirm that the portfolio was successfully constructed to be uncorrelated with the market, as intended.
+
+```{r risks-p-mv, echo=FALSE}
+# Question 24 ----
+# Compute portfolio returns using weights from part (22)
+p_mv_uncorrelated <- as.matrix(excess_returns) %*% w_mv_uncorrelated  # Compute portfolio returns
+
+alpha_p_mv <- get_alphas(p_mv_uncorrelated)  # Alpha
+beta_p_mv <- get_betas(p_mv_uncorrelated)   # Beta
+non_market_risk_mv <- f_get_residual_se(p_mv_uncorrelated)  # Residual standard deviation
+
+# Compute Market Risk (Beta * SD of Market)
+market_risk_mv <- beta_p_mv * sd(sp500)
+
+# Compute R-squared: proportion of variance explained by the market
+r_squared <- (beta_p_mv^2 * var(sp500)) / var(p_mv_uncorrelated)
+
+# Display results in a data frame
+market_model_params_24 <- data.frame(
+  Alpha = round(alpha_p_mv, 6),
+  Beta = round(beta_p_mv, 6),
+  Market_Risk = round(market_risk_mv, 6),
+  Non_Market_Risk = round(non_market_risk_mv, 6),
+  R_Squared = round(r_squared, 6)
+) |> 
+  rename(
+    "Market Risk" = "Market_Risk",
+    "Non-Market Risk" = "Non_Market_Risk"
+  )
+
+knitr::kable(market_model_params_24, caption = "Market Model Parameters for Minimum Variance Portfolio (Uncorrelated)") |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+# Question 25
+
+The Sharpe, Treynor, and Appraisal Ratios for each of the four funds are shown in Table \@ref(tab:all-ratios). Based on the results, **`FSRBX` appears to be the best investment**. It has the highest Sharpe ratio (0.1000), indicating the best risk-adjusted return among the four funds. It also has the highest Treynor ratio (0.0082), meaning it provides the best return per unit of market risk (beta exposure). Although its appraisal ratio (-0.0181) is negative, it is the least negative, suggesting that its alpha (excess return relative to non-market risk) is better than the other funds.
+
+Overall, because `FSRBX` has superior Sharpe and Treynor ratios, it offers the best trade-off between return and risk, making it the best investment choice among the four funds.
+
+```{r all-ratios, echo=FALSE}
+# Question 25 ----
+# Function to calculate Sharpe, Treynor, and Appraisal Ratios
+calculate_ratios <- function(fund_returns, market_returns) {
+  model <- lm(fund_returns ~ market_returns)
+  alpha <- coef(model)[1]  # Alpha
+  beta <- coef(model)[2]   # Beta
+  total_sd <- sd(fund_returns)  # Total risk (std dev)
+  market_sd <- beta * sd(market_returns)  # Market risk
+  residual_sd <- summary(model)$sigma  # Non-market risk
+  
+  # Sharpe Ratio = Excess Returns / Total Risk
+  sharpe_ratio <- (mean(fund_returns)) / total_sd
+  
+  # Treynor Ratio = Excess Returns / Beta
+  treynor_ratio <- ifelse(beta != 0, (mean(fund_returns)) / beta, NA)
+  
+  # Appraisal Ratio = Alpha / Non-Market Risk
+  appraisal_ratio <- ifelse(residual_sd != 0, alpha / residual_sd, NA)
+  
+  return(c(Sharpe_Ratio = sharpe_ratio, Treynor_Ratio = treynor_ratio, Appraisal_Ratio = appraisal_ratio))
+}
+
+# Compute ratios for each fund
+ratios_list <- lapply(excess_returns, calculate_ratios, sp500)
+
+# Convert results to a data frame
+ratios_df <- do.call(rbind, ratios_list)
+rownames(ratios_df) <- colnames(excess_returns)  # Fund names
+ratios_df <- as.data.frame(ratios_df) |> 
+  rename(
+    "Sharpe Ratio" = "Sharpe_Ratio",
+    "Treynor Ratio" = "Treynor_Ratio.market_returns",
+    "Appraisal Ratio" = "Appraisal_Ratio"
+  )
+
+knitr::kable(ratios_df, caption = "Sharpe, Treynor, and Appraisal Ratios for Each Fund") |> 
+  kableExtra::kable_styling(latex_options = "hold_position")
+```
+
+
+
+
