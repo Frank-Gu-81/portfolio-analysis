@@ -21,10 +21,7 @@ library(ShrinkCovMat)
 library(quadprog)
 ```
 
-# Notes
-
-All necessary R code that contains all the calculations, steps, and results can be downloaded here:
-[Download R Code](https://github.com/Frank-Gu-81/portfolio-analysis).
+**All necessary R code that contains all the calculations, steps, and results can be downloaded here**: [https://github.com/Frank-Gu-81/portfolio-analysis](https://github.com/Frank-Gu-81/portfolio-analysis).
 
 # Question 1
 
