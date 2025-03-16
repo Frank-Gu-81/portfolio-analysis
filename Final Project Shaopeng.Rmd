@@ -455,7 +455,7 @@ p_params |>
 
 # Question 18
 
-We calculated the adjusted p-values to be $[0.3667, 0.8908, 0.8908, 0.8908]$. Since the minimum adjusted p-value is 0.3667, which is larger than the FDR level of 0.20, we fail to reject the null hypothesis that the beta is equal to zero for all stocks. This means that there is not enough evidence to conclude that any of the funds are mispriced.
+We calculated the adjusted p-values to be $[0.3667, 0.8908, 0.8908, 0.8908]$. Since the minimum adjusted p-value is 0.3667, which is larger than the FDR level of 0.20, we fail to reject the null hypothesis that the beta is equal to zero for all stocks. This means that **there is not enough evidence to conclude that any of the funds are mispriced**.
 
 
 # Question 19
