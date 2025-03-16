@@ -21,7 +21,7 @@ library(ShrinkCovMat)
 library(quadprog)
 ```
 
-**All necessary R code that contains all the calculations, steps, and results can be downloaded here**: [https://github.com/Frank-Gu-81/portfolio-analysis](https://github.com/Frank-Gu-81/portfolio-analysis).
+**All necessary R code that contains all the calculations, steps, and results can be downloaded here**: [https://github.com/Frank-Gu-81/portfolio-analysis/blob/main/final_project_sandbox.R](https://github.com/Frank-Gu-81/portfolio-analysis/blob/main/final_project_sandbox.R).
 
 # Question 1
 
@@ -135,11 +135,11 @@ sample_sd_df <- sample_sd_df |>
 knitr::kable(sample_sd_df, caption = "Return Sample Standard Deviation for Mutual Funds") |> kableExtra::kable_styling(latex_options = "hold_position")
 ```
 
-Based on the return sample mean and standard deviation, `FSRBX` appears to be the most superior fund because it has the highest return sample mean (0.0090) but also the highest risk (0.0904 standard deviation). This suggests that while FSRBX offers the best average return, it is also the most volatile.
+Based on the return sample mean and standard deviation, `FSRBX` **appears to be the most attractive fund** in terms of returns, as it has the highest return sample mean (0.0090). However, it also has the highest risk (0.0904 standard deviation), indicating that while FSRBX offers the best potential return, it is also the most volatile.
 
-Conversely, `PRRAX` appears to be the most inferior because it has the lowest return sample mean (0.0025) and a relatively high standard deviation (0.0604), meaning it provides the worst risk-return tradeoff.
+Conversely, `PRRAX` **appears to be the least favorable fund**, as it has the lowest return sample mean (0.0025) and a relatively high standard deviation (0.0604). This suggests that PRRAX provides the worst risk-return tradeoff, making it a less desirable option for risk-conscious investors.
 
-Overall, there is no fund that is clearly superior or inferior to all others in both return and risk. Some investors might prefer a fund with lower returns but also lower volatility (e.g., `FSPHX` with 0.0030 mean return and 0.0503 standard deviation). The best choice depends on the investor’s risk tolerance and return expectations.
+Overall, **no single fund is clearly superior or inferior in all aspects**. Investors seeking higher returns and willing to accept more volatility may prefer `FSRBX`, while those prioritizing lower risk might find `FSPHX` (0.0030 mean return, 0.0503 standard deviation) more suitable. The optimal choice ultimately depends on an investor’s risk tolerance and return expectations.
 
 # Question 5
 
